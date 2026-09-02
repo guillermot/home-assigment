@@ -7,15 +7,13 @@ processes it with `pandas`, prints a ranked table, and exports `weather_data.csv
 Open-Meteo  ──▶  client.py  ──▶  processing.py  ──▶  export.py  ──▶  weather_data.csv
    (HTTP)        Observation      DataFrame +           CSV
                                   derived columns
-                        ▲
-                  pipeline.py orchestrates the three;
-                  cli.py wires them together
+                     └────────┬────────┘                 │
+                         pipeline.py                     │
+                    (failures tolerated)                 │
+                              └────────────┬─────────────┘
+                                        cli.py
+                             (argparse + composition root)
 ```
-
-[`docs/sequence-diagram.md`](docs/sequence-diagram.md) traces the full call sequence,
-including the retry and partial-failure paths.
-[`docs/design-decisions.md`](docs/design-decisions.md) records every design decision — and the
-features that were deliberately **not** built, with the reasoning.
 
 ## Quickstart
 
@@ -79,8 +77,6 @@ uv run ruff format .  # format
 uv run mypy           # strict type checking
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint, format check, type check, and tests on every push.
-
 ## Layout
 
 ```
@@ -93,5 +89,15 @@ src/weather/
   export.py      # CSV writing
   cli.py         # argparse + composition root
 tests/           # pytest suite, HTTP mocked with `responses`
-docs/            # exercise brief, sequence diagram, design decisions
 ```
+
+## Notes
+
+**No `.env`.** Open-Meteo requires no API key, so there are no secrets to load
+and no configuration layer to maintain.
+
+**Retries for resiliency.** The HTTP session retries transient failures — 429 and
+5xx, `GET` only — three times with exponential backoff (0s, 1s, 2s). This is
+configured on the transport adapter, so no module above the client knows retries
+exist. A city that still fails is recorded as a failure and the run continues
+with the remaining nine; only a total failure exits non-zero.
